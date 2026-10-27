@@ -1,0 +1,171 @@
+{
+ "actions": [],
+ "creation": "2026-10-27 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sb_pricing",
+  "pricing_authority",
+  "allow_offline_cash_sales",
+  "offline_max_hours",
+  "offline_max_sale_value",
+  "cb_pricing",
+  "variance_tolerance",
+  "cash_rounding_increment",
+  "allow_negative_stock_sales",
+  "sb_security",
+  "pin_max_attempts",
+  "pin_lock_minutes",
+  "approval_ttl_seconds",
+  "cb_security",
+  "signing_secret",
+  "sb_receipts",
+  "receipt_footer",
+  "public_receipt_links",
+  "receipt_link_hours"
+ ],
+ "fields": [
+  {
+   "fieldname": "sb_pricing",
+   "fieldtype": "Section Break",
+   "label": "Pricing and checkout"
+  },
+  {
+   "fieldname": "pricing_authority",
+   "fieldtype": "Select",
+   "label": "Pricing authority",
+   "options": "native\nnest",
+   "default": "native",
+   "reqd": 1,
+   "description": "native: ERPNext Pricing Rules. nest: Nest promotions (Pricing Rules ignored on Nest sales)."
+  },
+  {
+   "fieldname": "allow_offline_cash_sales",
+   "fieldtype": "Check",
+   "label": "Allow offline cash sales",
+   "default": "1"
+  },
+  {
+   "fieldname": "offline_max_hours",
+   "fieldtype": "Int",
+   "label": "Offline sales allowed for (hours)",
+   "default": "12"
+  },
+  {
+   "fieldname": "offline_max_sale_value",
+   "fieldtype": "Currency",
+   "label": "Largest offline sale",
+   "description": "0 means no limit"
+  },
+  {
+   "fieldname": "cb_pricing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "variance_tolerance",
+   "fieldtype": "Currency",
+   "label": "Cash variance tolerance before a reason is required",
+   "default": "0"
+  },
+  {
+   "fieldname": "cash_rounding_increment",
+   "fieldtype": "Float",
+   "label": "Cash rounding increment",
+   "description": "e.g. 0.05; 0 disables"
+  },
+  {
+   "fieldname": "allow_negative_stock_sales",
+   "fieldtype": "Check",
+   "label": "Allow selling below zero stock",
+   "description": "Off by default. ERPNext's own Stock Settings still apply."
+  },
+  {
+   "fieldname": "sb_security",
+   "fieldtype": "Section Break",
+   "label": "Security"
+  },
+  {
+   "fieldname": "pin_max_attempts",
+   "fieldtype": "Int",
+   "label": "PIN attempts before lock",
+   "default": "5"
+  },
+  {
+   "fieldname": "pin_lock_minutes",
+   "fieldtype": "Int",
+   "label": "First lock length (minutes)",
+   "default": "5"
+  },
+  {
+   "fieldname": "approval_ttl_seconds",
+   "fieldtype": "Int",
+   "label": "Manager approval valid for (seconds)",
+   "default": "120"
+  },
+  {
+   "fieldname": "cb_security",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "signing_secret",
+   "fieldtype": "Password",
+   "label": "QR signing secret",
+   "read_only": 1,
+   "description": "Generated at install. Rotate to invalidate printed QR codes."
+  },
+  {
+   "fieldname": "sb_receipts",
+   "fieldtype": "Section Break",
+   "label": "Receipts"
+  },
+  {
+   "fieldname": "receipt_footer",
+   "fieldtype": "Small Text",
+   "label": "Receipt footer"
+  },
+  {
+   "fieldname": "public_receipt_links",
+   "fieldtype": "Check",
+   "label": "Allow expiring public receipt links",
+   "default": "0"
+  },
+  {
+   "fieldname": "receipt_link_hours",
+   "fieldtype": "Int",
+   "label": "Receipt link lifetime (hours)",
+   "default": "72"
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-27 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Nest POS Setup",
+ "name": "Nest POS Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Nest POS Manager",
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "issingle": 1,
+ "track_changes": 1
+}

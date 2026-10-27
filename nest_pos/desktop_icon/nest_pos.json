@@ -1,0 +1,32 @@
+{
+ "app": "nest_pos",
+ "creation": "2026-10-27 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon_type": "App",
+ "idx": 60,
+ "label": "Nest POS",
+ "link": "/desk/nest-pos",
+ "link_type": "External",
+ "logo_url": "/assets/nest_pos/images/nest-pos-logo.png",
+ "modified": "2026-10-27 00:00:00.000000",
+ "modified_by": "Administrator",
+ "name": "Nest POS",
+ "owner": "Administrator",
+ "roles": [
+  {
+   "role": "Nest POS Cashier"
+  },
+  {
+   "role": "Nest POS Supervisor"
+  },
+  {
+   "role": "Nest POS Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "standard": 1
+}

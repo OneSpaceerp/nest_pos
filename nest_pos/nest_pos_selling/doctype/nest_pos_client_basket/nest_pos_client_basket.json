@@ -1,0 +1,200 @@
+{
+ "actions": [],
+ "creation": "2026-10-27 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "handoff_code",
+  "status",
+  "register",
+  "client_session",
+  "request_key",
+  "fingerprint",
+  "cb_1",
+  "claimed_by",
+  "claimed_at",
+  "imported_cart",
+  "invoice",
+  "expires_at",
+  "total_preview",
+  "price_list",
+  "sb_items",
+  "items",
+  "client_note",
+  "cancel_reason",
+  "version"
+ ],
+ "fields": [
+  {
+   "fieldname": "handoff_code",
+   "fieldtype": "Data",
+   "label": "Handoff code",
+   "read_only": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Submitted\nClaimed\nImported\nCompleted\nCancelled\nExpired",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "register",
+   "fieldtype": "Link",
+   "label": "Register",
+   "options": "Nest POS Register",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "client_session",
+   "fieldtype": "Link",
+   "label": "Client session",
+   "options": "Nest POS Client Session",
+   "read_only": 1
+  },
+  {
+   "fieldname": "request_key",
+   "fieldtype": "Data",
+   "label": "Request key",
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "fingerprint",
+   "fieldtype": "Data",
+   "label": "Fingerprint",
+   "read_only": 1,
+   "length": 64
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "claimed_by",
+   "fieldtype": "Link",
+   "label": "Claimed by",
+   "options": "User",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "claimed_at",
+   "fieldtype": "Datetime",
+   "label": "Claimed at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "imported_cart",
+   "fieldtype": "Data",
+   "label": "Imported into cart",
+   "read_only": 1
+  },
+  {
+   "fieldname": "invoice",
+   "fieldtype": "Data",
+   "label": "Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_preview",
+   "fieldtype": "Currency",
+   "label": "Total shown to client",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "price_list",
+   "fieldtype": "Link",
+   "label": "Price list",
+   "options": "Price List",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_items",
+   "fieldtype": "Section Break",
+   "label": "Items"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Nest POS Client Basket Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_note",
+   "fieldtype": "Small Text",
+   "label": "Note from client",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cancel_reason",
+   "fieldtype": "Small Text",
+   "label": "Cancel reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "default": "0",
+   "read_only": 1,
+   "hidden": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-27 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Nest POS Selling",
+ "name": "Nest POS Client Basket",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Nest POS Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Nest POS Supervisor",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Nest POS Cashier",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "format:BSK-{YYYY}-{#####}",
+ "naming_rule": "Expression",
+ "track_changes": 1
+}
