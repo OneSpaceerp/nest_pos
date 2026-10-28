@@ -138,7 +138,36 @@ function searchCustomers() {
 function chooseCustomer(c: { name: string; customer_name: string } | null) {
   till.cart.customer = c?.name ?? null
   till.cart.customerName = c?.customer_name ?? null
+  closeCustomer()
+}
+function closeCustomer() {
   customerOpen.value = false
+  newCustomer.value = null
+}
+
+// add a customer at the till; the search text pre-fills the mobile (digits) or the name (letters)
+const newCustomer = ref<{ customer_name: string; mobile_no: string; email_id: string } | null>(null)
+const newBusy = ref(false)
+const newError = ref('')
+function startNewCustomer() {
+  const q = customerQuery.value.trim()
+  const isPhone = /^[+\d][\d\s()-]*$/.test(q)
+  newCustomer.value = { customer_name: isPhone ? '' : q, mobile_no: isPhone ? q : '', email_id: '' }
+  newError.value = ''
+}
+async function saveNewCustomer() {
+  if (!newCustomer.value || newBusy.value) return
+  newBusy.value = true
+  newError.value = ''
+  try {
+    const c = await call<{ name: string; customer_name: string; existing: boolean }>(till.api('create_customer'), { register_name: till.registerName.value, ...newCustomer.value })
+    toast(c.existing ? t('{0} already has this number — selected.', c.customer_name) : t('Customer {0} added', c.customer_name), c.existing ? 'info' : 'ok')
+    chooseCustomer(c)
+  } catch (e) {
+    newError.value = (e as Error).message
+  } finally {
+    newBusy.value = false
+  }
 }
 
 // a paired phone scans into *this* cart only (matched by cart id on the server and here)
@@ -227,13 +256,30 @@ onBeforeUnmount(() => off?.())
       </ul>
     </NSheet>
 
-    <NSheet :open="customerOpen" :title="t('Customer')" @close="customerOpen = false">
+    <NSheet :open="customerOpen" :title="newCustomer ? t('New customer') : t('Customer')" @close="closeCustomer">
+      <form v-if="newCustomer" class="sell__new" novalidate @submit.prevent="saveNewCustomer">
+        <label class="sell__field">{{ t('Full name') }}
+          <input v-model="newCustomer.customer_name" class="sell__input" autocomplete="off" maxlength="140" required />
+        </label>
+        <label class="sell__field">{{ t('Mobile number') }}
+          <input v-model="newCustomer.mobile_no" class="sell__input" type="tel" inputmode="tel" autocomplete="off" maxlength="20" dir="ltr" />
+        </label>
+        <label class="sell__field">{{ t('Email (optional)') }}
+          <input v-model="newCustomer.email_id" class="sell__input" type="email" inputmode="email" autocomplete="off" maxlength="140" dir="ltr" />
+        </label>
+        <p v-if="!till.online.value" class="sell__hint" role="status">{{ t('Adding a customer needs a connection.') }}</p>
+        <p v-if="newError" class="sell__error" role="alert">{{ newError }}</p>
+        <div class="sell__new-actions">
+          <NButton variant="ghost" @click="newCustomer = null">{{ t('Back') }}</NButton>
+          <NButton type="submit" variant="primary" icon="check" :busy="newBusy" :disabled="!till.online.value || newCustomer.customer_name.trim().length < 2">{{ t('Add customer') }}</NButton>
+        </div>
+      </form>
+      <template v-else>
       <input v-model="customerQuery" class="sell__input" type="search" :placeholder="t('Name, phone or ID')" :aria-label="t('Name, phone or ID')" autocomplete="off" @input="searchCustomers" />
       <p class="sell__hint muted" role="status">
         <template v-if="customerState === 'searching'">{{ t('Searching') }}…</template>
         <template v-else-if="customerState === 'done' && !customers.length">{{ t('No customer matches “{0}”.', customerQuery.trim()) }}</template>
         <template v-else-if="customerState === 'error'">{{ customerError }}</template>
-        <template v-else-if="customerState === 'idle'">{{ t('Type at least 2 letters or the phone number.') }}</template>
       </p>
       <ul class="sell__list" role="list">
         <li v-for="c in customers" :key="c.name">
@@ -243,7 +289,14 @@ onBeforeUnmount(() => off?.())
           </button>
         </li>
         <li><button type="button" :class="['sell__list-item', { 'sell__list-item--on': !till.cart.customer }]" @click="chooseCustomer(null)">{{ t('Walk-in customer') }}<NIcon v-if="!till.cart.customer" name="check" /></button></li>
+        <li>
+          <button type="button" class="sell__list-item sell__list-item--add" @click="startNewCustomer">
+            <span>{{ customerState === 'done' && !customers.length ? t('Add “{0}” as a new customer', customerQuery.trim()) : t('New customer') }}</span>
+            <NIcon name="plus" />
+          </button>
+        </li>
       </ul>
+      </template>
     </NSheet>
 
     <NSheet :open="!!choice" :title="choice?.kind === 'variant' ? t('Choose a variant') : t('More than one product has this code')" @close="choice = null">
@@ -266,7 +319,15 @@ onBeforeUnmount(() => off?.())
 .sell__change strong { font-size: var(--text-2xl); }
 .sell__list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
 .sell__list-item { inline-size: 100%; display: flex; justify-content: space-between; gap: var(--space-3); min-block-size: var(--touch-lg); padding-inline: var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: var(--surface-card); cursor: pointer; text-align: start; align-items: center; color: var(--text-strong); }
-.sell__hint { margin-block-start: var(--space-2); font-size: var(--text-sm); min-block-size: 1.4em; }
+.sell__hint { margin-block-start: var(--space-2); font-size: var(--text-sm); }
+.sell__hint:empty { display: none; }
+.sell__list-item--add { border-style: dashed; font-weight: 600; }
+.sell__new { display: grid; gap: var(--space-4); }
+.sell__field { display: grid; gap: 6px; font-size: var(--text-sm); font-weight: 600; color: var(--text-strong); }
+.sell__field .sell__input { font-weight: 400; font-size: var(--text-md); }
+.sell__error { color: var(--danger-fg); background: var(--danger-bg); padding: var(--space-3); border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 600; }
+.sell__new-actions { display: flex; gap: var(--space-3); justify-content: flex-end; }
+.sell__new-actions > * { flex: 1; }
 .sell__cust { display: grid; gap: 2px; min-inline-size: 0; }
 .sell__cust > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sell__list-item--on { border-color: var(--text-strong); box-shadow: inset 0 0 0 1px var(--text-strong); }

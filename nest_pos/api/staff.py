@@ -10,6 +10,7 @@ from nest_pos.kit.staff_api import (  # noqa: F401  re-exported whitelisted endp
 	cash_movement,
 	catalog_page,
 	close_register,
+	create_customer,
 	create_return,
 	held_carts,
 	hold_cart,
