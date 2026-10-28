@@ -29,7 +29,9 @@ const receipt = ref<{ invoice?: { name: string; doctype?: string; amount_due: nu
 const held = ref<{ name: string; label: string; total_preview: number; creation: string }[] | null>(null)
 const customerOpen = ref(false)
 const customerQuery = ref('')
-const customers = ref<{ name: string; customer_name: string }[]>([])
+const customers = ref<{ name: string; customer_name: string; phone: string | null; email: string | null }[]>([])
+const customerState = ref<'idle' | 'searching' | 'done' | 'error'>('idle')
+const customerError = ref('')
 const choice = ref<{ code: string; candidates: string[]; kind: 'ambiguous' | 'variant' } | null>(null)
 
 async function handleScan(code: string) {
@@ -107,18 +109,36 @@ async function resume(name: string) {
     till.addItem(item ?? { item_code: l.item_code, item_name: l.item_code, rate: null }, l.qty)
   }
   till.cart.customer = cart.customer
+  till.cart.customerName = null
   held.value = null
 }
 
 let searchTimer = 0
 function searchCustomers() {
   clearTimeout(searchTimer)
+  const q = customerQuery.value.trim()
+  if (q.length < 2) {
+    customers.value = []
+    customerState.value = 'idle'
+    return
+  }
+  customerState.value = 'searching'
   searchTimer = window.setTimeout(async () => {
-    const q = customerQuery.value.trim()
-    customers.value = q
-      ? await call('frappe.client.get_list', { doctype: 'Customer', filters: [['disabled', '=', 0]], or_filters: [['customer_name', 'like', `%${q}%`], ['mobile_no', 'like', `%${q}%`], ['name', 'like', `%${q}%`]], fields: ['name', 'customer_name'], limit_page_length: 12 }, { method: 'POST' })
-      : []
+    try {
+      const found = await call<typeof customers.value>(till.api('search_customers'), { register_name: till.registerName.value, query: q }, { method: 'GET' })
+      if (customerQuery.value.trim() !== q) return // a newer search is on its way
+      customers.value = found
+      customerState.value = 'done'
+    } catch (e) {
+      customerError.value = (e as Error).message
+      customerState.value = 'error'
+    }
   }, 250)
+}
+function chooseCustomer(c: { name: string; customer_name: string } | null) {
+  till.cart.customer = c?.name ?? null
+  till.cart.customerName = c?.customer_name ?? null
+  customerOpen.value = false
 }
 
 // a paired phone scans into *this* cart only (matched by cart id on the server and here)
@@ -208,14 +228,21 @@ onBeforeUnmount(() => off?.())
     </NSheet>
 
     <NSheet :open="customerOpen" :title="t('Customer')" @close="customerOpen = false">
-      <input v-model="customerQuery" class="sell__input" :placeholder="t('Name, phone or ID')" @input="searchCustomers" />
+      <input v-model="customerQuery" class="sell__input" type="search" :placeholder="t('Name, phone or ID')" :aria-label="t('Name, phone or ID')" autocomplete="off" @input="searchCustomers" />
+      <p class="sell__hint muted" role="status">
+        <template v-if="customerState === 'searching'">{{ t('Searching') }}…</template>
+        <template v-else-if="customerState === 'done' && !customers.length">{{ t('No customer matches “{0}”.', customerQuery.trim()) }}</template>
+        <template v-else-if="customerState === 'error'">{{ customerError }}</template>
+        <template v-else-if="customerState === 'idle'">{{ t('Type at least 2 letters or the phone number.') }}</template>
+      </p>
       <ul class="sell__list" role="list">
-        <li><button type="button" class="sell__list-item" @click="till.cart.customer = null; customerOpen = false">{{ t('Walk-in customer') }}</button></li>
         <li v-for="c in customers" :key="c.name">
-          <button type="button" class="sell__list-item" @click="till.cart.customer = c.name; customerOpen = false">
-            <span>{{ c.customer_name }}</span><span class="muted code">{{ c.name }}</span>
+          <button type="button" :class="['sell__list-item', { 'sell__list-item--on': till.cart.customer === c.name }]" @click="chooseCustomer(c)">
+            <span class="sell__cust"><strong>{{ c.customer_name }}</strong><span class="muted code">{{ c.phone || c.email || c.name }}</span></span>
+            <NIcon v-if="till.cart.customer === c.name" name="check" />
           </button>
         </li>
+        <li><button type="button" :class="['sell__list-item', { 'sell__list-item--on': !till.cart.customer }]" @click="chooseCustomer(null)">{{ t('Walk-in customer') }}<NIcon v-if="!till.cart.customer" name="check" /></button></li>
       </ul>
     </NSheet>
 
@@ -239,6 +266,10 @@ onBeforeUnmount(() => off?.())
 .sell__change strong { font-size: var(--text-2xl); }
 .sell__list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
 .sell__list-item { inline-size: 100%; display: flex; justify-content: space-between; gap: var(--space-3); min-block-size: var(--touch-lg); padding-inline: var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: var(--surface-card); cursor: pointer; text-align: start; align-items: center; color: var(--text-strong); }
+.sell__hint { margin-block-start: var(--space-2); font-size: var(--text-sm); min-block-size: 1.4em; }
+.sell__cust { display: grid; gap: 2px; min-inline-size: 0; }
+.sell__cust > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sell__list-item--on { border-color: var(--text-strong); box-shadow: inset 0 0 0 1px var(--text-strong); }
 .sell__input { inline-size: 100%; min-block-size: var(--touch-lg); border-radius: var(--radius-md); border: 1px solid var(--border-strong); padding-inline: var(--space-3); background: var(--surface-card); color: var(--text-strong); }
 @media (max-width: 1023px) {
   .sell { flex-direction: column; }

@@ -19,6 +19,7 @@ postbuild({
       background: '#f4f5f6',
       theme: '#1e1d1d',
       cachePrefix: 'nestpos-staff-',
+      splash: { logo: 'nest-pos-logo.png', tagline: 'Retail till for ERPNext' },
       exclude: ['/nest-pos/customer'],
       shortcuts: [{ name: 'Sell', url: '/nest-pos/sell' }, { name: 'Client baskets', url: '/nest-pos/baskets' }],
     },
@@ -32,6 +33,7 @@ postbuild({
       background: '#ffde59',
       theme: '#ffde59',
       cachePrefix: 'nestpos-cust-',
+      splash: { logo: 'nest-pos-logo.png', tagline: 'Scan, check prices, skip the wait' },
     },
   ],
 })

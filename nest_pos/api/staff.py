@@ -20,6 +20,7 @@ from nest_pos.kit.staff_api import (  # noqa: F401  re-exported whitelisted endp
 	request_approval,
 	resolve_scan,
 	resume_cart,
+	search_customers,
 	retry_close,
 	returnable,
 	set_pin,

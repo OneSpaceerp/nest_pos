@@ -73,14 +73,14 @@ async function logout() {
   await call('logout', {}, { method: 'POST' }).catch(() => undefined)
   await purgeLocal('nest_pos')
   await purgeLocal('nestpos-staff-')
-  location.href = '/login?redirect-to=/nest-pos'
+  location.href = '/nest-pos/'
 }
 </script>
 
 <template>
   <NShell
     title="Nest POS"
-    logo="/assets/nest_pos/images/nest-pos-logo.png"
+    logo="/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb"
     :nav="nav"
     :embedded="embedded"
     desk-url="/desk/nest-pos"
@@ -110,7 +110,7 @@ async function logout() {
     </RouterView>
   </NShell>
   <NToasts />
-  <NInstall v-if="!embedded" app="nest_pos" name="Nest POS" logo="/assets/nest_pos/images/nest-pos-logo.png" />
+  <NInstall v-if="!embedded" app="nest_pos" name="Nest POS" logo="/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb" />
 </template>
 
 <style>

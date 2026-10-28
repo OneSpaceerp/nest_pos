@@ -166,7 +166,7 @@ const STATUS_TEXT: Record<string, [string, string]> = {
 <template>
   <div class="cust">
     <header class="cust__top">
-      <img src="/assets/nest_pos/images/nest-pos-logo.png" alt="" width="32" height="32" class="cust__logo" />
+      <img src="/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb" alt="" width="32" height="32" class="cust__logo" />
       <strong>{{ visit.outlet || 'Nest Shop' }}</strong>
       <span class="spacer" />
       <button type="button" class="cust__util" :aria-label="t('Language')" @click="toggleLanguage('nest_pos_customer', props.root)"><NIcon name="globe" /></button>
@@ -239,7 +239,7 @@ const STATUS_TEXT: Record<string, [string, string]> = {
       </template>
     </NSheet>
     <NToasts />
-    <NInstall app="nest_pos_customer" name="Nest Shop" logo="/assets/nest_pos/images/nest-pos-logo.png" />
+    <NInstall app="nest_pos_customer" name="Nest Shop" logo="/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb" />
   </div>
 </template>
 

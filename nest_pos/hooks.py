@@ -4,7 +4,7 @@ app_publisher = "Nest Software Development (nsdLabs)"
 app_description = "Retail point of sale for ERPNext: fast checkout, phone scanning, client baskets and registers"
 app_email = "info@nsd-eg.com"
 app_license = "UNLICENSED"  # pending a publisher licensing decision; see docs/provenance.md
-app_logo_url = "/assets/nest_pos/images/nest-pos-logo.png"
+app_logo_url = "/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb"
 app_home = "/desk/nest-pos"
 
 required_apps = ["erpnext"]
