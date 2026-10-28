@@ -82,7 +82,7 @@ async function pay(tenders: { mode_of_payment: string; amount: string }[]) {
 function printReceipt() {
   const inv = receipt.value?.invoice
   if (!inv) return
-  window.open(receiptUrl(till.register.value, inv.doctype ?? 'Sales Invoice', inv.name), '_blank', 'noopener')
+  window.open(receiptUrl(till.register.value, inv.doctype ?? 'Sales Invoice', inv.name, 'Nest POS Receipt'), '_blank', 'noopener')
 }
 
 async function hold() {

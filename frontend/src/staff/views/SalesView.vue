@@ -90,7 +90,7 @@ async function submitReturn() {
           <td class="num">{{ s.posting_time?.slice(0, 5) }}</td>
           <td class="num">{{ money(s.rounded_total || s.grand_total, s.currency) }}</td>
           <td class="sales__actions">
-            <a class="sales__link" :href="receiptUrl(till.register.value, invoiceDt, s.name)" target="_blank" rel="noopener">{{ t('Reprint') }}</a>
+            <a class="sales__link" :href="receiptUrl(till.register.value, invoiceDt, s.name, 'Nest POS Receipt')" target="_blank" rel="noopener">{{ t('Reprint') }}</a>
             <NButton v-if="!s.is_return" size="sm" icon="undo" @click="startReturn(s)">{{ t('Return') }}</NButton>
           </td>
         </tr>
