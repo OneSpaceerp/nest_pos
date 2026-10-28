@@ -13,7 +13,7 @@ if (import.meta.env.DEV) setCsrfToken(null)
 
 if (isSignedOut()) {
   // signed out: the app's own sign-in screen; a successful sign-in reloads into the till
-  createApp({ render: () => h(NLogin, { app: 'nest_pos', name: 'Nest POS', tagline: 'Retail till for ERPNext', logo: '/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb', brand: '#ffde59', root }) }).mount(root)
+  createApp({ render: () => h(NLogin, { app: 'nest_pos', name: 'Nest POS', tagline: 'Retail till for ERPNext', logo: '/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb', brand: '#ffde59', root, shopper: { href: '/nest-pos/customer/#signin', signupHref: '/nest-pos/customer/#signup' } }) }).mount(root)
 } else {
   const router = makeRouter('pwa')
   createApp({ render: () => h(App, { root }) }).use(router).mount(root)

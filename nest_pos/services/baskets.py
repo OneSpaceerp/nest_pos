@@ -18,7 +18,8 @@ from nest_pos.core.fingerprint import classify_replay, fingerprint, validate_key
 from nest_pos.core.fsm import CLIENT_BASKET
 from nest_pos.core.payloads import clean_lines, clean_note
 from nest_pos.core.tokens import TokenError, hash_token, new_token, short_code, verify_context
-from nest_pos.kit import access, audit, catalog, realtime
+from nest_pos.kit import access, audit, catalog, customers, realtime
+from nest_pos.services.accounts import linked_customer
 
 BASKET = "Nest POS Client Basket"
 CLIENT_SESSION = "Nest POS Client Session"
@@ -60,6 +61,8 @@ def start(register: str | None = None, store_code: str | None = None) -> dict:
 			"status": "Active",
 			"expires_at": add_to_date(now_datetime(), minutes=SESSION_IDLE_MINUTES),
 			"last_seen": now_datetime(),
+			# a signed-in shopper's baskets carry their account, so the till sells to them
+			"customer": linked_customer(),
 		}
 	)
 	doc.flags.ignore_permissions = True  # guest session record; only its hash is stored
@@ -132,6 +135,7 @@ def submit_basket(token: str, raw_lines, request_key: str, note: str = "") -> di
 			"status": "Submitted",
 			"register": session.register,
 			"client_session": session.name,
+			"customer": session.get("customer"),
 			"request_key": key,
 			"fingerprint": fp,
 			"expires_at": add_to_date(now_datetime(), minutes=BASKET_TTL_MINUTES),
@@ -197,7 +201,7 @@ def inbox(register: str) -> list[dict]:
 	return frappe.get_all(
 		BASKET,
 		filters={"register": register, "status": ["in", ["Submitted", "Claimed"]]},
-		fields=["name", "handoff_code", "status", "claimed_by", "total_preview", "creation", "expires_at", "version"],
+		fields=["name", "handoff_code", "status", "claimed_by", "total_preview", "creation", "expires_at", "version", "customer_name"],
 		order_by="creation asc",
 		limit_page_length=100,
 	)
@@ -252,7 +256,16 @@ def import_into_cart(basket: str, cart_id: str) -> dict:
 			}
 		)
 	audit.log("basket.import", BASKET, doc.name, register=doc.register, cart=cart_id)
-	return {"basket": doc.name, "handoff_code": doc.handoff_code, "lines": lines, "note": doc.client_note}
+	# the shopper's account becomes the sale's customer when this register may sell to it
+	customer = doc.get("customer") if doc.get("customer") and customers.can_sell_to(frappe.get_cached_doc("POS Profile", profile), doc.customer) else None
+	return {
+		"basket": doc.name,
+		"handoff_code": doc.handoff_code,
+		"lines": lines,
+		"note": doc.client_note,
+		"customer": customer,
+		"customer_name": frappe.db.get_value("Customer", customer, "customer_name") if customer else None,
+	}
 
 
 def release(basket: str) -> dict:

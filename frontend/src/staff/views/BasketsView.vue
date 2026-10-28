@@ -4,6 +4,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import NButton from '@shared/components/NButton.vue'
+import NIcon from '@shared/components/NIcon.vue'
 import NSheet from '@shared/components/NSheet.vue'
 import NState from '@shared/components/NState.vue'
 import NStatus from '@shared/components/NStatus.vue'
@@ -13,8 +14,8 @@ import { minutesAgo, money, t } from '@shared/lib/i18n'
 import { on, poll } from '@shared/lib/realtime'
 import { POS_API, useTill } from '../state'
 
-interface Row { name: string; handoff_code: string; status: string; claimed_by: string | null; total_preview: number; creation: string }
-interface Imported { basket: string; handoff_code: string; note: string; lines: { item_code: string; item_name: string; qty: number; rate_preview: number; rate_now: number | null; price_changed: boolean; available: boolean }[] }
+interface Row { name: string; handoff_code: string; status: string; claimed_by: string | null; total_preview: number; creation: string; customer_name?: string | null }
+interface Imported { basket: string; handoff_code: string; note: string; customer?: string | null; customer_name?: string | null; lines: { item_code: string; item_name: string; qty: number; rate_preview: number; rate_now: number | null; price_changed: boolean; available: boolean }[] }
 
 const till = useTill()
 const router = useRouter()
@@ -54,6 +55,10 @@ function accept() {
     till.addItem({ item_code: l.item_code, item_name: l.item_name, rate: l.rate_now ?? item?.rate ?? null, item_group: item?.item_group }, l.qty)
   }
   till.cart.basket = r.basket
+  if (r.customer) {
+    till.cart.customer = r.customer
+    till.cart.customerName = r.customer_name ?? null
+  }
   review.value = null
   void router.push('/sell')
 }
@@ -93,6 +98,7 @@ const age = (c: string) => (Date.now() - new Date(c.replace(' ', 'T')).getTime()
         <span class="bsk__meta">
           <NStatus :tone="r.status === 'Submitted' ? 'brand' : 'info'" :label="r.status === 'Submitted' ? t('Waiting') : t('With {0}', r.claimed_by ?? '')" />
           <span class="muted">{{ minutesAgo(age(r.creation)) }}</span>
+          <span v-if="r.customer_name" class="bsk__who"><NIcon name="user" :size="14" />{{ r.customer_name }}</span>
         </span>
         <span class="bsk__total num">{{ money(r.total_preview, currency) }}</span>
         <NButton v-if="r.status === 'Submitted' || r.claimed_by === till.boot.value?.user" variant="primary" :busy="busy === r.name" @click="claimAndImport(r)">{{ t('Claim') }}</NButton>
@@ -133,4 +139,5 @@ const age = (c: string) => (Date.now() - new Date(c.replace(' ', 'T')).getTime()
 .bsk__warn { background: var(--warn-bg); color: var(--warn-fg); padding: var(--space-3); border-radius: var(--radius-md); margin-block-start: var(--space-3); }
 .bsk__note { font-style: italic; margin-block-end: var(--space-3); }
 @media (max-width: 640px) { .bsk__row { grid-template-columns: auto 1fr; } .bsk__row > :last-child { grid-column: 1 / -1; } }
+.bsk__who { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--text-strong); }
 </style>

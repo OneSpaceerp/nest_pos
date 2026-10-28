@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// Shopper surface. No ERP words, no staff data. The guest holds an opaque token for one store visit;
-// the basket and its request key survive reloads so a retry after a lost response returns the same basket.
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+// Nest Shop: the shopper app. Four places, one thumb away: Home, Scan (the big button in the middle),
+// Basket and Account. Works without an account; signing in keeps receipts and lets the till know who
+// is buying. No ERP words, no staff data; guest calls carry an opaque visit token only.
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import NButton from '@shared/components/NButton.vue'
 import NIcon from '@shared/components/NIcon.vue'
 import NQty from '@shared/components/NQty.vue'
@@ -11,263 +12,199 @@ import NState from '@shared/components/NState.vue'
 import NInstall from '@shared/components/NInstall.vue'
 import NToasts from '@shared/components/NToasts.vue'
 import { toast } from '@shared/components/toast'
-import { ApiError, call, newKey } from '@shared/lib/api'
+import { call } from '@shared/lib/api'
 import { money, t } from '@shared/lib/i18n'
 import { cycleTheme, toggleLanguage } from '@shared/app/surface'
+import AccountTab from './views/AccountTab.vue'
+import BasketTab from './views/BasketTab.vue'
+import HomeTab from './views/HomeTab.vue'
+import { API, accountMode, addToBasket, checkPrice, count, needsStore, refreshStatus, startVisit, status, stopPolling, visit, type PriceView } from './visit'
 
 const props = defineProps<{ root: HTMLElement }>()
-const API = (m: string) => `nest_pos.api.client.${m}`
-const STORE_KEY = 'nest_pos_customer:visit'
+const LOGO = '/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb'
 
-interface PriceView { status: string; item_code: string; item_name: string; image?: string; description?: string; uom: string; rate: number; currency: string; price_includes_tax: boolean | null; availability: 'in_stock' | 'low' | 'out' | null }
-interface Line { item_code: string; item_name: string; qty: number; rate: number; image?: string }
-interface Visit { token: string; outlet: string; register: string; currency: string; lines: Line[]; pendingKey: string | null; basket: string | null }
+type Tab = 'home' | 'basket' | 'account'
+const TABS: Tab[] = ['home', 'basket', 'account']
+const fromHash = (h: string): Tab | null => (TABS.includes(h as Tab) ? (h as Tab) : h === 'signin' || h === 'signup' ? 'account' : null)
+const tab = ref<Tab>(fromHash(location.hash.slice(1)) ?? 'home')
+watch(tab, (v) => history.replaceState(null, '', `${location.pathname}${location.search}#${v}`))
+const onHash = () => {
+  const h = location.hash.slice(1)
+  if (h === 'signin' || h === 'signup') accountMode.value = h
+  const next = fromHash(h)
+  if (next) tab.value = next
+}
 
-const visit = reactive<Visit>({ token: '', outlet: '', register: '', currency: 'USD', lines: [], pendingKey: null, basket: null })
-const stage = ref<'choose' | 'store' | 'shop' | 'sent'>('choose')
-const outlets = ref<{ register: string; outlet_label: string }[] | null>(null)
+// ---- scanning and the product sheet
 const scanning = ref(false)
 const found = ref<PriceView | null>(null)
 const foundQty = ref(1)
-const sending = ref(false)
-const status = ref<{ status: string; handoff_code: string; total_preview: number } | null>(null)
-const error = ref('')
-let pollTimer = 0
-
-const total = computed(() => visit.lines.reduce((a, l) => a + l.qty * l.rate, 0))
-const count = computed(() => visit.lines.reduce((a, l) => a + l.qty, 0))
-
-function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(visit)) } catch { /* private mode */ }
+function openScanner() {
+  if (!visit.token) return void (needsStore.value = true)
+  scanning.value = true
 }
-watch(visit, save, { deep: true })
+async function onCode(code: string) {
+  const res = await checkPrice(code)
+  if (!res) return
+  scanning.value = false
+  showProduct(res)
+}
+function showProduct(p: PriceView) {
+  found.value = p
+  foundQty.value = 1
+}
+function addFound() {
+  if (found.value && addToBasket(found.value, foundQty.value)) {
+    toast(t('{0} added to your basket', found.value.item_name))
+    found.value = null
+  }
+}
 
-onMounted(async () => {
-  try { Object.assign(visit, JSON.parse(localStorage.getItem(STORE_KEY) ?? '{}')) } catch { /* fresh visit */ }
-  const storeCode = new URLSearchParams(location.search).get('store') ?? location.pathname.match(/\/customer\/s\/([^/]+)/)?.[1]
-  if (storeCode) return start({ store_code: decodeURIComponent(storeCode) })
-  if (visit.basket) {
-    stage.value = 'sent'
-    void refreshStatus()
-  } else if (visit.token) stage.value = 'shop'
-})
-onBeforeUnmount(() => clearTimeout(pollTimer))
-
+// ---- store picker (first visit, expired visit or "change store")
+const outlets = ref<{ register: string; outlet_label: string }[] | null>(null)
+const storeError = ref('')
+watch(needsStore, (v) => v && void loadOutlets(), { immediate: true })
 async function loadOutlets() {
-  stage.value = 'store'
+  storeError.value = ''
   try {
     outlets.value = await call(API('outlets'), {}, { method: 'GET' })
   } catch (e) {
-    error.value = (e as Error).message
+    storeError.value = (e as Error).message
   }
 }
-
-async function start(args: { register_name?: string; store_code?: string }) {
+async function pickStore(register: string) {
   try {
-    const res = await call<{ token: string; outlet: string; register: string }>(API('start'), args)
-    Object.assign(visit, { token: res.token, outlet: res.outlet, register: res.register, lines: visit.register === res.register ? visit.lines : [], basket: null, pendingKey: null })
-    stage.value = 'shop'
-    history.replaceState(null, '', '/nest-pos/customer/')
+    await startVisit({ register_name: register })
   } catch (e) {
-    error.value = (e as Error).message
-    stage.value = 'store'
-  }
-}
-
-async function guarded<T>(fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn()
-  } catch (e) {
-    if (e instanceof ApiError && e.kind === 'permission') {
-      toast(e.message, 'warn')
-      Object.assign(visit, { token: '', basket: null, pendingKey: null })
-      stage.value = 'store'
-      void loadOutlets()
-      return undefined
-    }
     toast((e as Error).message, 'danger')
-    return undefined
   }
 }
 
-async function onCode(code: string) {
-  const res = await guarded(() => call<PriceView>(API('price'), { token: visit.token, code }))
-  if (!res) return
-  if (res.status !== 'ok') {
-    toast(t('We couldn’t find that product. Ask a member of staff.'), 'warn')
-    return
-  }
-  scanning.value = false
-  visit.currency = res.currency
-  found.value = res
-  foundQty.value = 1
-}
+onMounted(async () => {
+  window.addEventListener('hashchange', onHash)
+  const storeCode = new URLSearchParams(location.search).get('store') ?? location.pathname.match(/\/customer\/s\/([^/]+)/)?.[1]
+  if (storeCode) {
+    try {
+      await startVisit({ store_code: decodeURIComponent(storeCode) })
+      history.replaceState(null, '', `/nest-pos/customer/#${tab.value}`)
+    } catch (e) {
+      toast((e as Error).message, 'danger')
+      needsStore.value = true
+    }
+  } else if (!visit.token) needsStore.value = true
+  if (visit.basket) void refreshStatus()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('hashchange', onHash)
+  stopPolling()
+})
 
-function addFound() {
-  const f = found.value!
-  const existing = visit.lines.find((l) => l.item_code === f.item_code)
-  if (existing) existing.qty += foundQty.value
-  else visit.lines.push({ item_code: f.item_code, item_name: f.item_name, qty: foundQty.value, rate: f.rate, image: f.image })
-  found.value = null
-}
-
-async function send() {
-  sending.value = true
-  visit.pendingKey ??= newKey('basket-') // reused on retry: the server returns the same basket
-  const res = await guarded(() =>
-    call<{ basket: string; handoff_code: string; status: string; total_preview: number }>(API('submit'), {
-      token: visit.token,
-      lines: visit.lines.map((l) => ({ item_code: l.item_code, qty: l.qty })),
-      request_key: visit.pendingKey,
-    }, { timeoutMs: 20000 }),
-  )
-  sending.value = false
-  if (!res) return
-  visit.basket = res.basket
-  visit.pendingKey = null
-  status.value = res
-  stage.value = 'sent'
-  schedulePoll()
-}
-
-async function refreshStatus() {
-  if (!visit.basket) return
-  const res = await guarded(() => call<{ status: string; handoff_code: string; total_preview: number }>(API('status'), { token: visit.token, basket: visit.basket }))
-  if (res) status.value = res
-  schedulePoll()
-}
-function schedulePoll() {
-  clearTimeout(pollTimer)
-  if (status.value && ['Completed', 'Cancelled', 'Expired'].includes(status.value.status)) return
-  pollTimer = window.setTimeout(refreshStatus, 4000)
-}
-
-async function cancelBasket() {
-  const res = await guarded(() => call<{ status: string; handoff_code: string; total_preview: number }>(API('cancel'), { token: visit.token, basket: visit.basket }))
-  if (res) status.value = res
-}
-
-function newBasket() {
-  Object.assign(visit, { lines: [], basket: null, pendingKey: null })
-  status.value = null
-  stage.value = 'shop'
-}
-
-const STATUS_TEXT: Record<string, [string, string]> = {
-  Submitted: ['Waiting for a cashier', 'Go to any till and show this code.'],
-  Claimed: ['A cashier has your basket', 'They are checking your items now.'],
-  Imported: ['Your basket is at the till', 'Pay at the till to finish.'],
-  Completed: ['Paid — thank you', 'Your receipt comes from the till.'],
-  Cancelled: ['This basket was cancelled', 'Start a new basket if you still want to buy.'],
-  Expired: ['This basket expired', 'Baskets wait for an hour. Start a new one.'],
-}
+const basketBadge = computed(() => (visit.basket && status.value && !['Completed', 'Cancelled', 'Expired'].includes(status.value.status) ? '•' : count.value ? String(count.value) : ''))
 </script>
 
 <template>
-  <div class="cust">
-    <header class="cust__top">
-      <img src="/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb" alt="" width="32" height="32" class="cust__logo" />
-      <strong>{{ visit.outlet || 'Nest Shop' }}</strong>
-      <span class="spacer" />
-      <button type="button" class="cust__util" :aria-label="t('Language')" @click="toggleLanguage('nest_pos_customer', props.root)"><NIcon name="globe" /></button>
-      <button type="button" class="cust__util" :aria-label="t('Theme')" @click="cycleTheme('nest_pos_customer', props.root)"><NIcon name="moon" /></button>
+  <div class="shop">
+    <header class="shop__top">
+      <img :src="LOGO" alt="" width="34" height="34" class="shop__logo" />
+      <button type="button" class="shop__store" :aria-label="t('Change store')" @click="needsStore = true">
+        <span class="shop__store-label" dir="auto">{{ visit.outlet || t('Choose your store') }}</span>
+        <NIcon name="chevron" :size="16" class="shop__store-chev" />
+      </button>
+      <button type="button" class="shop__util" :aria-label="t('Language')" @click="toggleLanguage('nest_pos_customer', props.root)"><NIcon name="globe" /></button>
+      <button type="button" class="shop__util" :aria-label="t('Theme')" @click="cycleTheme('nest_pos_customer', props.root)"><NIcon name="moon" /></button>
     </header>
 
-    <main class="cust__main scroll">
-      <section v-if="stage === 'choose'" class="cust__hero">
-        <h1>{{ t('Scan, check prices, skip the wait') }}</h1>
-        <p class="muted">{{ t('Build your basket on your phone and hand it to the till with one code.') }}</p>
-        <NButton variant="primary" size="lg" icon="basket" block @click="loadOutlets">{{ t('I am shopping') }}</NButton>
-        <a class="cust__staff" href="/nest-pos/sell">{{ t('I work here') }}</a>
-      </section>
-
-      <section v-else-if="stage === 'store'" class="cust__panel">
-        <h1>{{ t('Which store are you in?') }}</h1>
-        <p class="muted">{{ t('Or scan the store’s QR code at the entrance.') }}</p>
-        <NState v-if="error" kind="error" :title="error" :retry="loadOutlets" />
-        <NState v-else-if="!outlets" kind="loading" :title="t('Loading')" />
-        <ul v-else class="cust__list" role="list">
-          <li v-for="o in outlets" :key="o.register"><button type="button" class="cust__item" @click="start({ register_name: o.register })">{{ o.outlet_label }}<NIcon name="chevron" /></button></li>
-        </ul>
-      </section>
-
-      <section v-else-if="stage === 'shop'" class="cust__panel">
-        <NState v-if="!visit.lines.length" kind="empty" icon="scan" :title="t('Scan your first product')" :detail="t('You’ll see its price before adding it.')" />
-        <ul v-else class="cust__lines" role="list">
-          <li v-for="(l, i) in visit.lines" :key="l.item_code" class="cust__line">
-            <span class="cust__line-name">{{ l.item_name }}<br /><span class="muted num">{{ money(l.rate, visit.currency) }}</span></span>
-            <NQty :model-value="l.qty" :min="0" :label="t('Quantity of {0}', l.item_name)" @update:model-value="(v: number) => (v ? (l.qty = v) : visit.lines.splice(i, 1))" />
-          </li>
-        </ul>
-      </section>
-
-      <section v-else-if="stage === 'sent' && status" class="cust__panel cust__sent">
-        <p class="cust__label">{{ t('Show this code at the till') }}</p>
-        <p class="cust__code code" aria-live="polite">{{ status.handoff_code }}</p>
-        <h2>{{ t(STATUS_TEXT[status.status]?.[0] ?? status.status) }}</h2>
-        <p class="muted">{{ t(STATUS_TEXT[status.status]?.[1] ?? '') }}</p>
-        <p class="num">{{ t('Estimated total') }} <strong>{{ money(status.total_preview, visit.currency) }}</strong></p>
-        <p class="muted cust__small">{{ t('Prices are confirmed by the cashier. This is not a receipt.') }}</p>
-        <NButton v-if="status.status === 'Submitted'" variant="ghost" @click="cancelBasket">{{ t('Cancel basket') }}</NButton>
-        <NButton v-if="['Completed', 'Cancelled', 'Expired'].includes(status.status)" variant="primary" @click="newBasket">{{ t('Start a new basket') }}</NButton>
-      </section>
+    <main class="shop__main scroll">
+      <HomeTab v-if="tab === 'home'" @scan="openScanner" @product="showProduct" @go="(v: Tab) => (tab = v)" />
+      <BasketTab v-else-if="tab === 'basket'" @scan="openScanner" />
+      <AccountTab v-else @go="(v: Tab) => (tab = v)" />
     </main>
 
-    <footer v-if="stage === 'shop'" class="cust__bar">
-      <div class="cust__sum"><span class="num">{{ t('{0} items', count) }}</span><strong class="num">{{ money(total, visit.currency) }}</strong></div>
-      <button type="button" class="cust__scan" :aria-label="t('Scan')" @click="scanning = true"><NIcon name="scan" :size="30" /></button>
-      <NButton variant="primary" :busy="sending" :disabled="!visit.lines.length" @click="send">{{ t('Send basket to cashier') }}</NButton>
-    </footer>
+    <nav class="shop__tabs" :aria-label="t('Sections')">
+      <button type="button" :class="['shop__tab', { 'shop__tab--on': tab === 'home' }]" :aria-current="tab === 'home' ? 'page' : undefined" @click="tab = 'home'"><NIcon name="register" /><span>{{ t('Home') }}</span></button>
+      <button type="button" :class="['shop__tab', { 'shop__tab--on': tab === 'basket' }]" :aria-current="tab === 'basket' ? 'page' : undefined" @click="tab = 'basket'">
+        <span class="shop__tab-icon"><NIcon name="basket" /><span v-if="basketBadge" class="shop__badge num">{{ basketBadge }}</span></span><span>{{ t('Basket') }}</span>
+      </button>
+      <button type="button" class="shop__fab" :aria-label="t('Scan a product')" @click="openScanner"><NIcon name="scan" :size="30" /></button>
+      <button type="button" :class="['shop__tab', { 'shop__tab--on': tab === 'account' }]" :aria-current="tab === 'account' ? 'page' : undefined" @click="tab = 'account'"><NIcon name="user" /><span>{{ t('Account') }}</span></button>
+    </nav>
 
     <NSheet :open="scanning" :title="t('Check a price')" @close="scanning = false">
       <NScanner v-if="scanning" @code="onCode" @close="scanning = false" />
     </NSheet>
 
     <NSheet :open="!!found" :title="found?.item_name ?? ''" @close="found = null">
-      <div v-if="found" class="cust__found">
-        <img v-if="found.image" :src="found.image" alt="" class="cust__img" />
-        <p class="cust__price num">{{ money(found.rate, found.currency) }} <span class="muted">/ {{ found.uom }}</span></p>
-        <p v-if="found.price_includes_tax !== null" class="muted">{{ found.price_includes_tax ? t('Price includes tax') : t('Tax is added at the till') }}</p>
-        <p v-if="found.availability === 'out'" class="cust__out">{{ t('Out of stock here') }}</p>
-        <p v-else-if="found.availability === 'low'" class="muted">{{ t('Only a few left') }}</p>
+      <div v-if="found" class="shop__product">
+        <div class="shop__product-img"><img v-if="found.image" :src="found.image" alt="" /><NIcon v-else name="image" :size="40" /></div>
+        <p class="shop__product-price num">{{ money(found.rate, found.currency) }} <small class="muted">/ {{ found.uom }}</small></p>
+        <p class="shop__product-tags">
+          <span v-if="found.availability === 'out'" class="shop__tag shop__tag--out">{{ t('Out of stock here') }}</span>
+          <span v-else-if="found.availability === 'low'" class="shop__tag shop__tag--low">{{ t('Only a few left') }}</span>
+          <span v-else-if="found.availability === 'in_stock'" class="shop__tag shop__tag--ok">{{ t('In stock') }}</span>
+          <span v-if="found.price_includes_tax !== null" class="shop__tag">{{ found.price_includes_tax ? t('Price includes tax') : t('Tax is added at the till') }}</span>
+        </p>
         <p v-if="found.description" class="muted">{{ found.description }}</p>
-        <NQty v-model="foundQty" :min="1" :label="t('Quantity')" />
+        <label class="shop__qty">{{ t('Quantity') }} <NQty v-model="foundQty" :min="1" :label="t('Quantity')" /></label>
       </div>
       <template #actions>
-        <NButton @click="found = null; scanning = true">{{ t('Scan another') }}</NButton>
+        <NButton icon="scan" @click="found = null; openScanner()">{{ t('Scan another') }}</NButton>
         <NButton variant="primary" icon="plus" :disabled="found?.availability === 'out'" @click="addFound">{{ t('Add to basket') }}</NButton>
       </template>
     </NSheet>
+
+    <NSheet :open="needsStore" :title="t('Which store are you in?')" :dismissible="!!visit.token" @close="needsStore = false">
+      <p class="muted shop__store-hint">{{ t('Or scan the QR code at the store entrance with your camera.') }}</p>
+      <NState v-if="storeError" kind="error" :title="storeError" :retry="loadOutlets" />
+      <NState v-else-if="!outlets" kind="loading" :title="t('Loading')" />
+      <NState v-else-if="!outlets.length" kind="empty" icon="basket" :title="t('No store is taking baskets right now')" />
+      <ul v-else class="shop__stores" role="list">
+        <li v-for="o in outlets" :key="o.register">
+          <button type="button" :class="['shop__store-row', { 'shop__store-row--on': o.register === visit.register }]" @click="pickStore(o.register)">
+            <NIcon name="basket" /><span>{{ o.outlet_label }}</span><NIcon v-if="o.register === visit.register" name="check" />
+          </button>
+        </li>
+      </ul>
+    </NSheet>
+
     <NToasts />
-    <NInstall app="nest_pos_customer" name="Nest Shop" logo="/assets/nest_pos/images/nest-pos-logo.png?v=7ea748eb" />
+    <NInstall app="nest_pos_customer" name="Nest Shop" :logo="LOGO" />
   </div>
 </template>
 
 <style>
-.cust { display: flex; flex-direction: column; block-size: 100%; }
-.cust__top { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-4); min-block-size: 56px; background: var(--brand-fill); color: var(--brand-on-fill); }
-.cust__logo { border-radius: 8px; box-shadow: 0 0 0 2px var(--nest-ink-900); }
-.cust__util { inline-size: var(--touch); block-size: var(--touch); border: 0; background: transparent; color: inherit; display: grid; place-items: center; border-radius: var(--radius-md); cursor: pointer; }
-.cust__main { flex: 1; min-block-size: 0; padding: var(--space-5) var(--space-4); }
-.cust__hero, .cust__panel { max-inline-size: 520px; margin-inline: auto; display: grid; gap: var(--space-4); }
-.cust__hero h1 { font-size: clamp(1.75rem, 1.2rem + 3vw, 2.5rem); line-height: 1.1; }
-.cust__staff { text-align: center; color: var(--text-body); font-weight: 600; min-block-size: var(--touch); display: grid; place-items: center; }
-.cust__list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
-.cust__item { inline-size: 100%; display: flex; justify-content: space-between; align-items: center; min-block-size: var(--touch-lg); padding-inline: var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: var(--surface-card); color: var(--text-strong); font-weight: 600; cursor: pointer; }
-.cust__lines { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
-.cust__line { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--surface-card); border-radius: var(--radius-md); }
-.cust__line-name { font-weight: 600; color: var(--text-strong); overflow-wrap: anywhere; }
-.cust__bar { display: grid; grid-template-columns: 1fr auto 1fr; gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-3) calc(var(--space-2) + var(--safe-bottom)); background: var(--surface-card); border-block-start: 1px solid var(--border-subtle); }
-.cust__sum { display: grid; font-size: var(--text-sm); }
-.cust__sum strong { font-size: var(--text-lg); color: var(--text-strong); }
-.cust__scan { inline-size: 68px; block-size: 68px; border-radius: 50%; border: 0; background: var(--action-primary-bg); color: var(--action-primary-fg); display: grid; place-items: center; margin-block-start: -24px; box-shadow: var(--shadow-overlay); cursor: pointer; }
-.cust__sent { text-align: center; justify-items: center; }
-.cust__label { font-weight: 600; }
-.cust__code { font-size: clamp(3rem, 14vw, 4.5rem); font-weight: 700; letter-spacing: 0.16em; background: var(--brand-fill); color: var(--brand-on-fill); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-5); }
-.cust__small { font-size: var(--text-sm); }
-.cust__found { display: grid; gap: var(--space-3); justify-items: start; }
-.cust__img { inline-size: 100%; max-block-size: 220px; object-fit: contain; border-radius: var(--radius-md); background: var(--surface-sunken); }
-.cust__price { font-size: var(--text-2xl); font-weight: 700; color: var(--text-strong); }
-.cust__out { color: var(--danger-fg); font-weight: 600; }
-@media (max-width: 380px) { .cust__bar { grid-template-columns: 1fr auto; } .cust__sum { display: none; } }
+.shop { display: flex; flex-direction: column; block-size: 100%; background: var(--surface-page); }
+.shop__top { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); min-block-size: 60px; background: var(--brand-fill); color: var(--brand-on-fill); }
+.shop__logo { border-radius: 9px; box-shadow: 0 0 0 2px var(--nest-ink-900); flex: none; }
+.shop__store { flex: 1; min-inline-size: 0; display: inline-flex; align-items: center; gap: 4px; border: 0; background: rgb(255 255 255 / 0.45); color: inherit; min-block-size: 40px; padding-inline: var(--space-3); border-radius: var(--radius-pill); font: inherit; font-weight: 700; cursor: pointer; justify-self: start; max-inline-size: max-content; }
+.shop__store-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop__store-chev { transform: rotate(90deg); }
+.shop__util { inline-size: var(--touch); block-size: var(--touch); border: 0; background: transparent; color: inherit; display: grid; place-items: center; border-radius: var(--radius-md); cursor: pointer; flex: none; }
+.shop__top > .shop__util:first-of-type { margin-inline-start: auto; }
+.shop__main { flex: 1; min-block-size: 0; padding: var(--space-4) var(--space-4) var(--space-6); }
+.shop__main > * { max-inline-size: 560px; margin-inline: auto; }
+
+.shop__tabs { position: relative; display: grid; grid-template-columns: 1fr 1fr 84px 1fr; align-items: end; background: var(--surface-card); border-block-start: 1px solid var(--border-subtle); padding: 6px var(--space-2) calc(6px + var(--safe-bottom)); }
+.shop__tab { display: grid; justify-items: center; gap: 2px; min-block-size: 52px; border: 0; background: none; color: var(--text-muted); font: inherit; font-size: var(--text-xs); font-weight: 600; cursor: pointer; border-radius: var(--radius-md); }
+.shop__tab--on { color: var(--text-strong); }
+.shop__tab--on .n-icon { background: var(--brand-fill); color: var(--brand-on-fill); border-radius: var(--radius-pill); padding: 2px 14px; box-sizing: content-box; }
+.shop__tab-icon { position: relative; display: inline-grid; }
+.shop__badge { position: absolute; inset-block-start: -6px; inset-inline-end: -12px; min-inline-size: 20px; block-size: 20px; padding-inline: 5px; border-radius: 10px; background: var(--danger-fg); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+/* the scan button sits in the bar, raised: the one thing people come here to do */
+.shop__fab { justify-self: center; inline-size: 70px; block-size: 70px; margin-block-start: -34px; border-radius: 50%; border: 5px solid var(--surface-page); background: var(--action-primary-bg); color: var(--action-primary-fg); display: grid; place-items: center; cursor: pointer; box-shadow: var(--shadow-overlay); }
+
+.shop__product { display: grid; gap: var(--space-3); }
+.shop__product-img { aspect-ratio: 4 / 3; max-block-size: 240px; display: grid; place-items: center; background: var(--surface-sunken); border-radius: var(--radius-lg); overflow: hidden; color: var(--text-muted); }
+.shop__product-img img { inline-size: 100%; block-size: 100%; object-fit: contain; }
+.shop__product-price { font-size: var(--text-2xl); font-weight: 700; color: var(--text-strong); }
+.shop__product-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.shop__tag { font-size: var(--text-xs); font-weight: 600; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--surface-sunken); color: var(--text-body); }
+.shop__tag--ok { background: var(--ok-bg); color: var(--ok-fg); }
+.shop__tag--low { background: var(--warn-bg); color: var(--warn-fg); }
+.shop__tag--out { background: var(--danger-bg); color: var(--danger-fg); }
+.shop__qty { display: inline-flex; align-items: center; gap: var(--space-3); font-weight: 600; }
+.shop__store-hint { margin-block-end: var(--space-3); }
+.shop__stores { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.shop__store-row { inline-size: 100%; display: flex; align-items: center; gap: var(--space-3); min-block-size: var(--touch-lg); padding-inline: var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: var(--surface-card); color: var(--text-strong); font: inherit; font-weight: 600; cursor: pointer; text-align: start; }
+.shop__store-row span { flex: 1; }
+.shop__store-row--on { border-color: var(--text-strong); box-shadow: inset 0 0 0 1px var(--text-strong); }
 </style>

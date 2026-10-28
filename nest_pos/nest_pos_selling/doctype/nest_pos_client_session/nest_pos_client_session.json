@@ -10,7 +10,8 @@
   "status",
   "expires_at",
   "last_seen",
-  "baskets_submitted"
+  "baskets_submitted",
+  "customer"
  ],
  "fields": [
   {
@@ -64,6 +65,14 @@
    "label": "Baskets submitted",
    "default": "0",
    "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Shopper account (customer)",
+   "options": "Customer",
+   "read_only": 1,
+   "description": "Set when the shopper was signed in to their Nest Shop account"
   }
  ],
  "links": [],

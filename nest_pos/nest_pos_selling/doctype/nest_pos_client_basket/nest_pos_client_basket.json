@@ -8,6 +8,8 @@
   "status",
   "register",
   "client_session",
+  "customer",
+  "customer_name",
   "request_key",
   "fingerprint",
   "cb_1",
@@ -57,6 +59,21 @@
    "label": "Client session",
    "options": "Nest POS Client Session",
    "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer name",
+   "read_only": 1,
+   "fetch_from": "customer.customer_name"
   },
   {
    "fieldname": "request_key",
