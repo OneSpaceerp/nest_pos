@@ -211,7 +211,7 @@ onBeforeUnmount(() => off?.())
     </div>
 
     <NSheet :open="tapeOpen" :title="t('Current sale')" @close="tapeOpen = false">
-      <CartTape :till="till" @pay="paying = true" @hold="hold" @customer="customerOpen = true" @held="tapeOpen = false; showHeld()" />
+      <CartTape sheet :till="till" @pay="paying = true" @hold="hold" @customer="customerOpen = true" @held="tapeOpen = false; showHeld()" />
     </NSheet>
 
     <NSheet :open="scanning" :title="t('Scan')" wide @close="scanning = false">
