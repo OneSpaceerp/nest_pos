@@ -9,6 +9,7 @@ import NStatus from '@shared/components/NStatus.vue'
 import { toast } from '@shared/components/toast'
 import { call, newKey } from '@shared/lib/api'
 import { money, t } from '@shared/lib/i18n'
+import { receiptUrl } from '@shared/till/till'
 import { useTill } from '../state'
 
 interface Sale { name: string; customer_name: string; rounded_total: number; grand_total: number; posting_time: string; is_return: number; currency: string }
@@ -89,7 +90,7 @@ async function submitReturn() {
           <td class="num">{{ s.posting_time?.slice(0, 5) }}</td>
           <td class="num">{{ money(s.rounded_total || s.grand_total, s.currency) }}</td>
           <td class="sales__actions">
-            <a class="sales__link" :href="`/printview?doctype=${encodeURIComponent(invoiceDt)}&name=${encodeURIComponent(s.name)}&trigger_print=1`" target="_blank" rel="noopener">{{ t('Reprint') }}</a>
+            <a class="sales__link" :href="receiptUrl(till.register.value, invoiceDt, s.name)" target="_blank" rel="noopener">{{ t('Reprint') }}</a>
             <NButton v-if="!s.is_return" size="sm" icon="undo" @click="startReturn(s)">{{ t('Return') }}</NButton>
           </td>
         </tr>

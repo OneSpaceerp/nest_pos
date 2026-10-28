@@ -8,6 +8,7 @@ import NQty from '@shared/components/NQty.vue'
 import NScanner from '@shared/components/NScanner.vue'
 import NSheet from '@shared/components/NSheet.vue'
 import NState from '@shared/components/NState.vue'
+import NInstall from '@shared/components/NInstall.vue'
 import NToasts from '@shared/components/NToasts.vue'
 import { toast } from '@shared/components/toast'
 import { ApiError, call, newKey } from '@shared/lib/api'
@@ -238,6 +239,7 @@ const STATUS_TEXT: Record<string, [string, string]> = {
       </template>
     </NSheet>
     <NToasts />
+    <NInstall app="nest_pos_customer" name="Nest Shop" logo="/assets/nest_pos/images/nest-pos-logo.png" />
   </div>
 </template>
 

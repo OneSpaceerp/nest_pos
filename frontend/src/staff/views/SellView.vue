@@ -12,6 +12,7 @@ import type { ScanOutcome } from '@shared/lib/scan'
 import CartTape from '@shared/till/CartTape.vue'
 import CatalogPanel from '@shared/till/CatalogPanel.vue'
 import PaySheet from '@shared/till/PaySheet.vue'
+import { receiptUrl } from '@shared/till/till'
 import { useTill } from '../state'
 
 const till = useTill()
@@ -81,8 +82,7 @@ async function pay(tenders: { mode_of_payment: string; amount: string }[]) {
 function printReceipt() {
   const inv = receipt.value?.invoice
   if (!inv) return
-  const dt = encodeURIComponent(inv.doctype ?? 'Sales Invoice')
-  window.open(`/printview?doctype=${dt}&name=${encodeURIComponent(inv.name)}&trigger_print=1&no_letterhead=0`, '_blank', 'noopener')
+  window.open(receiptUrl(till.register.value, inv.doctype ?? 'Sales Invoice', inv.name), '_blank', 'noopener')
 }
 
 async function hold() {
