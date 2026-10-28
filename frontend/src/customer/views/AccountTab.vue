@@ -101,8 +101,8 @@ async function saveProfile() {
 }
 async function signOut() {
   await call('logout', {}, { method: 'POST' }).catch(() => undefined)
-  location.hash = '#home'
-  location.reload()
+  // back to the Nest POS sign-in page, which also offers "Shopper sign in" and "Create account"
+  location.replace('/nest-pos/')
 }
 const initials = computed(() => (client.value?.full_name ?? '').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase())
 const fmtDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
